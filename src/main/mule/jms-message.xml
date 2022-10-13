@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="5aabc919-b79e-4e37-9a52-05e9e5eefee8" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<jms:config name="JMS_Config" doc:name="JMS Config" doc:id="d059330d-7cca-4887-90ab-f2740042d6ff" >
+		<jms:active-mq-connection username="admin" password="admin" >
+			<jms:factory-configuration brokerUrl="tcp://localhost:61616" />
+		</jms:active-mq-connection>
+	</jms:config>
+	<flow name="jms-messageFlow" doc:id="c639c1a1-2baf-4556-8608-bb56617d5562" initialState="stopped">
+		<http:listener doc:name="Listener" doc:id="f4e13dbc-dd32-4d85-9a06-d2b9d7ac34f3" config-ref="HTTP_Listener_config" path="/test"/>
+		<jms:publish doc:name="Publish" doc:id="70881506-60ce-44e0-a571-6964123f647b" config-ref="JMS_Config" destination="SOURCE-TARGET-Q" sendCorrelationId="ALWAYS" persistentDelivery="true">
+			<reconnect />
+			<jms:message outboundContentType="application/json" >
+				<jms:properties ><![CDATA[#[%dw 2.0 output application/json
+---
+{
+	"Property1":"Property1",
+	"Property2":"Property2"
+}]]]></jms:properties>
+			</jms:message>
+		</jms:publish>
+		<jms:consume doc:name="Consume" doc:id="4231e70f-4205-4b62-9162-fb7f683f805b" config-ref="JMS_Config" destination="SOURCE-TARGET-Q" ackMode="MANUAL" contentType="application/json">
+			<jms:consumer-type>
+				<jms:queue-consumer />
+			</jms:consumer-type>
+		</jms:consume>
+		<ee:transform doc:name="ackToken" doc:id="a72d56c5-914a-499e-98d6-f5a48b25efff" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="ackToken" ><![CDATA[attributes.ackId]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<ee:transform doc:name="Transform Message" doc:id="87f42bc6-23f8-499b-84e2-bbe8bae30765" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"UserProperty1":attributes.properties.userProperties
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<jms:ack doc:name="Ack" doc:id="25d513ae-0aa8-4256-9790-beba9fa836ef" ackId="#[vars.ackToken]"/>
+		<ee:transform doc:name="Transform Message" doc:id="62edc0f4-5162-4a8e-a5c2-2684364fbe3a" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"Message":"Consumed successfully",
+	"Code":200
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
